@@ -7,7 +7,7 @@ import java.util.function.Function;
 
 /** Administrator-configured slots. Installed apps and saved Home choices never supply extra slots. */
 final class FixedHome {
-    static final int SLOTS = 4;
+    private static final int MAX_SLOTS = 4;
     static final String INPUT = "input:";
 
     static final class Slot {
@@ -34,10 +34,14 @@ final class FixedHome {
         }
     }
 
-    /** Keep four focusable positions even for incomplete configuration. Ignore any additional entries. */
+    /** Only build-time entries define the row; keep one safe placeholder for an empty configuration. */
+    static int slotCount(String[] configured) {
+        return Math.max(1, Math.min(MAX_SLOTS, configured.length));
+    }
+
     static List<Slot> slots(String[] configured) {
         List<Slot> result = new ArrayList<>();
-        for (int i = 0; i < SLOTS; i++) {
+        for (int i = 0; i < slotCount(configured); i++) {
             String value = i < configured.length && configured[i] != null ? configured[i] : "";
             String[] parts = value.split("\\|", 2);
             String label = parts[0].trim();

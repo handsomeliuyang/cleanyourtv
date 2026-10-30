@@ -8,7 +8,7 @@
 <resources>
 
     <!-- This household's opt-in fixed Home. Set false to restore the normal launcher.
-         Build-time only: themes and on-TV choices cannot unlock or replace these four slots.
+         Build-time only: themes and on-TV choices cannot unlock or replace these slots.
          Format: label|package[,alternate package], or label|input:HDMI 1.
          App identities verified from the publishers; HDMI input ID must be checked on the real TV. -->
     <bool name="fixed_home">true</bool>
@@ -16,11 +16,10 @@
         <item>看电影|org.jellyfin.androidtv</item>
         <item>看照片|com.synology.projectkailash,com.synology.projectkailash.cn</item>
         <item>看电视|input:HDMI 1</item>
-        <item>看央视|com.newtv.cboxtv</item>
     </string-array>
     <!-- Optional exact HDMI 1 input ID from this TV's dumpsys tv_input. Empty uses an unambiguous
          original HDMI 1 label. Never guess HW1 or select the first enumerated input. -->
-    <string name="fixed_home_input_id" translatable="false"></string>
+    <string name="fixed_home_input_id" translatable="false">com.mediatek.tvinput/.hdmi.HDMIInputService/HW5</string>
 
     <!-- Tried in order when no standard settings handler is usable; each package must also be visible
          through <queries> in the manifest. -->

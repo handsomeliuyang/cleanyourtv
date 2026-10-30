@@ -427,6 +427,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** clock_format, for the race panel's session times (the TextClocks take it in onCreate). */
     private String clockFormat = "system";
     private boolean fixedHome;
+    private int familyReminderIndex = -1;
     private java.util.Map<Integer, String> homeHoldAppKeys = java.util.Collections.emptyMap();
 
     @Override
@@ -655,7 +656,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onChildViewDetachedFromWindow(@NonNull View v) {
             }
         });
-        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, cfg.dockOpacity, cfg.dockGlass, cfg.dockEvenPadding, cfg.dockBand,
+        if (fixedHome) {
+            // Keep the design-sized cards together, with 36dp gaps instead of stretching across the TV.
+            // Measure against the wrapper so smaller displays still fit and focus zoom stays inside it.
+            View wrapper = (View) grid.getParent();
+            wrapper.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                int width = Math.min(r - l, Math.round((COLUMNS * (AppAdapter.DESIGN_W_DP + 36) + 20) * density));
+                FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) grid.getLayoutParams();
+                if (lp.width != width) {
+                    lp.width = width;
+                    lp.gravity = Gravity.CENTER_HORIZONTAL;
+                    grid.setLayoutParams(lp);
+                }
+            });
+        }
+        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, cfg.dockOpacity, cfg.dockGlass, cfg.dockEvenPadding && !fixedHome, cfg.dockBand,
                 singleRow, cfg.dockBandAll));
         if (cfg.fadeRows) TopFade.attach(grid, 48 * density);
         // Reduced motion: the tiles are simply there, with no entrance (reloadApps skips it there too).
@@ -1030,6 +1045,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onStart() {
         super.onStart();
+        updateFamilyReminder();
         stopped = false;
         started = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -1039,6 +1055,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         updateClockVisibility();
         tileRefresh.onStart();
+    }
+
+    /** One quiet message per visit, with no timer, network request or focusable control. */
+    private void updateFamilyReminder() {
+        if (!fixedHome) return;
+        String[] reminders = getResources().getStringArray(R.array.fixed_home_reminders);
+        if (reminders.length == 0) return;
+        familyReminderIndex = familyReminderIndex < 0 ? new java.util.Random().nextInt(reminders.length)
+                : (familyReminderIndex + 1) % reminders.length;
+        String[] lines = reminders[familyReminderIndex].split("\\|", 2);
+        ((TextView) findViewById(R.id.familyReminderTitle)).setText(lines[0]);
+        TextView detail = findViewById(R.id.familyReminderDetail);
+        detail.setText(lines.length > 1 ? lines[1] : "");
+        detail.setVisibility(lines.length > 1 ? View.VISIBLE : View.GONE);
+        findViewById(R.id.familyReminder).setVisibility(View.VISIBLE);
     }
 
     @Override

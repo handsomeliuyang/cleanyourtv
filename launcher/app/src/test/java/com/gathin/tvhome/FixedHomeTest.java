@@ -59,16 +59,26 @@ public class FixedHomeTest {
         }
     }
 
-    @Test public void incompleteOrExtraConfigurationCannotChangeSlotCount() {
+    @Test public void configuredEntriesDefineSlotCountWithinBounds() {
         List<FixedHome.Slot> missing = FixedHome.slots(new String[]{null, "Photos"});
-        assertEquals(4, missing.size());
+        assertEquals(2, missing.size());
         assertEquals("Photos", missing.get(1).label);
         assertNull(missing.get(1).resolve(pkg -> "unexpected"));
         assertEquals(4, FixedHome.slots(new String[]{"A", "B", "C", "D", "E"}).size());
+        assertEquals(1, FixedHome.slots(new String[]{}).size());
         try {
             missing.clear();
             fail("Slots must be immutable");
         } catch (UnsupportedOperationException expected) { }
+    }
+
+    @Test public void removingCctvLeavesExactlyThreeEntriesWithoutAnEmptyFourthCard() {
+        String[] configured = java.util.Arrays.copyOf(HOME, 3);
+        List<FixedHome.Slot> slots = FixedHome.slots(configured);
+        assertEquals(3, slots.size());
+        assertEquals(slots.size(), FixedHome.slotCount(configured));
+        assertEquals("看电视", slots.get(2).label);
+        for (FixedHome.Slot slot : slots) assertFalse(slot.target.contains("com.newtv.cboxtv"));
     }
 
     private static final class Port {

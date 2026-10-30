@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Offline household reminders: headline|supporting sentence. Only shown in fixed Home. -->
+    <string-array name="fixed_home_reminders" translatable="false">
+        <item>看一会儿，也让眼睛休息一会儿|远处看看，起来走走，好节目下次还在。</item>
+        <item>今天读几页，明天多懂一点|给阅读留一点时间，让好奇心陪你长大。</item>
+        <item>先完成小目标，再享受好节目|学一会儿，玩一会儿，每一天都能有收获。</item>
+        <item>屏幕外的世界，也值得探索|放下遥控器，去发现生活里的小惊喜。</item>
+        <item>留一点时间给阅读，也留一点给运动|读一个故事，动一动身体，今天一样很精彩。</item>
+    </string-array>
+</resources>

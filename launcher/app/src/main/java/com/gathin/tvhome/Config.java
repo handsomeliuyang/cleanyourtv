@@ -689,10 +689,10 @@ final class Config {
                 string(json, "festival_until", ""), string(json, "greeting", ""), string(json, "accent_color", ""));
 
         // Fixed Home is an administrator/build choice, applied AFTER themes and saved UI choices.
-        // Never let an old order, a pushed theme or an enabled module add a way out of the four slots.
+        // Never let an old order, a pushed theme or an enabled module add a way out of the configured slots.
         boolean fixedHome = BuildConfig.FIXED_HOME;
         if (fixedHome) {
-            columns = FixedHome.SLOTS;
+            columns = FixedHome.slotCount(res.getStringArray(R.array.fixed_home_slots));
             rowsBelow = 0;
             fillDock = false;
             moduleCards = library = librarySelection = libraryOkOpens = libraryButton = false;
