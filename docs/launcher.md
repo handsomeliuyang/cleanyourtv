@@ -32,6 +32,84 @@ and `sdkmanager "platforms;android-34" "build-tools;34.0.0"`. On Linux the insta
 
 Themes set the same keys plus a background colour and a wallpaper.
 
+### Fixed household Home (local ES43 configuration)
+
+This checkout enables `fixed_home` in `launcher/app/src/main/res/values/config.xml` for a household
+with four permanent slots, in order: 看电影 (Jellyfin), 看照片 (Synology Photos for Android TV), 看电视
+(HDMI 1), and 看央视 (央视频 TV). Set `fixed_home` to `false` and rebuild to use the ordinary launcher again.
+These are build-time settings: themes and saved on-TV choices cannot change the slot list or unlock it.
+
+- `fixed_home_slots` contains four `label|target` entries. An app target is its package name; comma-separated
+  alternatives support regional editions of the same app, with the first installed TV entry winning.
+  Only TV launch activities are opened. Missing or disabled apps keep their slots and show a maintenance
+  message when selected; they never lead to an installer or store. Additional installed apps never appear.
+- Installed clients use their own declared activity/application icon, centred in a uniform card. Missing
+  clients, missing icons and HDMI use the built-in functional artwork. Only the focused card shows its
+  short Chinese name; reserved label space prevents layout jumps.
+- The desktop has no app library, module cards, install/add-app entry, edit/reorder menu, app-info shortcut,
+  or long-press editing. The network indicator is read-only. Up opens the appearance-settings gear;
+  Down returns to the row. Left/Right stop at its ends. Home returns to the first slot, and returning
+  from an app restores its slot.
+- The gear retains the original wallpaper picker, dock opacity, clock and animation controls. Column,
+  row and reorder controls are hidden because the four slots are fixed. Themes can still be pushed
+  after installation using the original theme provider; no rebuild is needed to change appearance.
+  Theme changes cannot expose an app library or change the four destinations.
+- `input:HDMI 1` selects a unique HDMI port whose original label is `HDMI 1` (spacing and case ignored).
+  It excludes HDMI-CEC child devices. `fixed_home_input_id` can instead name the exact HDMI 1 input from
+  this TV's `dumpsys tv_input`. A missing ID or ambiguous label shows the maintenance message; neither
+  the first enumerated input nor `HW1` is assumed to be HDMI 1. The existing `input_action` and
+  `input_sources` configuration still handles vendor-specific switching after selecting the port.
+
+App identifiers were checked against the [official Jellyfin TV listing](https://play.google.com/store/apps/details?id=org.jellyfin.androidtv),
+the [Synology Android TV download archive](https://archive.synology.com/download/Mobile/AndroidTV-SynologyPhotos/1.1.4-10073)
+(`com.synology.projectkailash` and `.cn`), and the standard APK linked by the
+[央视频 TV publisher](https://www.chinaott.com/cpzx/xstphone.html) (`com.newtv.cboxtv`).
+The launcher opens these clients; it does not bundle, install or sign in to them. NAS and Jellyfin
+credentials belong in the respective clients, not in launcher configuration.
+
+Settings are protected by a six-digit [RFC 6238](https://www.rfc-editor.org/rfc/rfc6238) TOTP code
+(SHA-1, 30-second steps, one adjacent step of clock tolerance). No settings view is inflated until
+verification succeeds. Leaving settings for Home, another app or the lock screen closes that session.
+The quick-settings shortcut goes through the same gate. A used code cannot unlock again; five wrong
+codes cause a 60-second cooldown that survives process restarts. Missing or corrupt keys fail closed.
+
+The owner has confirmed the current Authenticator binding and wants to keep it for future builds.
+Routine builds and in-place updates must retain the package name, signing key and app data. They must
+not run provisioning again: the secret lives in private device data, not in the APK. Authentication
+tests belong on an isolated emulator with a separate test key. A first installation on another device
+requires a separate migration of the owner's existing binding; do not silently generate a replacement.
+
+The following provisioning command is only for an explicitly requested new/reset binding, using an
+already-authorized ADB connection. It is **not** part of the build or ordinary update procedure:
+
+```sh
+tools/venv/bin/pip install 'qrcode[pil]'  # desktop QR generation only
+tools/venv/bin/python tools/settings-auth.py --output-dir ~/.cleanyourtv/auth/phone-preview
+# For the TV instead, use a new folder and add --serial <adb-target> --label 'Family TV'.
+```
+
+Scan the private PNG with an Authenticator app and enter its current code on the device to confirm.
+Delete the temporary QR folder after confirming; the QR is a copy of the binding secret. The tool
+refuses output inside the checkout and never prints the secret or URI. The device stores its 20-byte
+key in its private, non-backed-up directory, separate from themes and layout preferences. The existing
+provider exposes a dedicated **ADB-shell-only, write-only** provisioning path, not a theme key or a
+read/export endpoint. To recover from a lost phone or bad binding, rerun provisioning with a new output
+folder; the new key replaces the old binding. There is no default or recovery PIN. Theme pushes cannot
+remove the gate. Authenticator cloud sync can copy the key to other devices; TOTP is possession of a
+secret, not hardware binding or two-factor authentication by itself.
+
+Gradle derives `BuildConfig.FIXED_HOME` from the same `config.xml` boolean so the release optimiser can
+remove unreachable app-library paths in this household build, while retaining theme/appearance code.
+Set the resource back to `false` and rebuild for the ordinary launcher, without the settings gate.
+
+This locks the desktop only. Native TV settings, physical remote shortcuts, USB installation and ADB
+remain system functions. There is no device-owner mode, new permission or network access.
+
+Build locally using **Build it yourself** above; do not run `build-and-install.sh` until the TV is available.
+Before installing on the ES43, check its SDK and installation restrictions, back up its original state,
+then verify all four entries, real remote long presses, HDMI 1 video/audio, return to Home, standby/wake
+and reboot. A local build or emulator check does not establish compatibility with the ES43 firmware.
+
 ## Launcher settings and the default home
 
 Click **Settings** for the TV's own settings. Hold OK on it for its menu:

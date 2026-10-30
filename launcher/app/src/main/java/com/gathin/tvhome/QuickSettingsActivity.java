@@ -27,6 +27,11 @@ public final class QuickSettingsActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (getResources().getBoolean(R.bool.fixed_home)) {
+            startActivity(new Intent(this, MainActivity.class).setAction(MainActivity.ACTION_LAUNCHER_SETTINGS));
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_quick_settings);
         if (getResources().getBoolean(R.bool.rtl_menu_bar)) {
             View panel = findViewById(R.id.panel);

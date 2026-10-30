@@ -66,7 +66,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     }
 
     static final class Entry {
-        static final int APP = 0, HOME_SETTINGS = 1, CARD = 2, EMPTY = 3;
+        static final int APP = 0, HOME_SETTINGS = 1, CARD = 2, EMPTY = 3, FIXED = 4;
 
         final int kind;
         final String label;
@@ -171,6 +171,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     /** The smallest share of the width-only tile size that fitting rows_below_dock into the height may go to. */
     static final float MIN_HEIGHT_FIT = 0.85f;
 
+    private final boolean fixedHome;
+    private final List<FixedHome.Slot> fixedSlots;
     private final Context ctx;
     private final int rowsBelowDock;
     private final boolean dockTitle;
@@ -224,6 +226,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     AppAdapter(Context ctx, TileListener listener, int dockSize, Config cfg) {
         this.ctx = ctx;
+        this.fixedHome = cfg.fixedHome;
+        this.fixedSlots = fixedHome ? FixedHome.slots(ctx.getResources().getStringArray(R.array.fixed_home_slots))
+                : Collections.emptyList();
         this.listener = listener;
         this.dockSize = dockSize;
         this.favourites = cfg.dockApps;
@@ -240,7 +245,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.dockTitle = cfg.dockTitle;
         this.dockRow = cfg.dockRow;
         this.singleRow = cfg.singleRow;
-        this.restNameAlpha = cfg.alwaysShowNames ? 0.75f : 0f;
+        this.restNameAlpha = cfg.fixedHome ? 0f : cfg.alwaysShowNames ? 0.75f : 0f;
         this.cinematic = cfg.cinematicHome;
         this.launchActions = cfg.launchActions;
         this.iconTiles = new HashSet<>(Arrays.asList(ctx.getResources().getStringArray(R.array.icon_tiles)));
@@ -258,6 +263,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
      * so focus follows it); hidden_apps wins over a card, and a card's package in dock_apps takes that slot.
      */
     void reload(List<Cards.Card> cards, List<ResolveInfo> leanback) {
+        if (fixedHome) {
+            reloadFixed();
+            return;
+        }
         PackageManager pm = ctx.getPackageManager();
         // The LEANBACK query is shared with the module-card check (MainActivity); copy it before adding
         // library apps so the caller's list stays as it was.
@@ -343,6 +352,50 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         items.clear();
         items.addAll(fresh);
         notifyDataSetChanged();
+    }
+
+    /** Build from slots, not installed packages. Missing apps keep their name, position and focus. */
+    private void reloadFixed() {
+        items.clear();
+        for (int n = 0; n < fixedSlots.size(); n++) {
+            FixedHome.Slot slot = fixedSlots.get(n);
+            Drawable icon = slot.resolve(pkg -> {
+                try {
+                    PackageManager pm = ctx.getPackageManager();
+                    Intent launch = pm.getLeanbackLaunchIntentForPackage(pkg);
+                    if (launch == null || launch.getComponent() == null) return null;
+                    android.content.pm.ActivityInfo info = pm.getActivityInfo(launch.getComponent(), 0);
+                    // An undeclared icon is Android's generic robot, not the app's own artwork.
+                    int iconId = info.icon != 0 ? info.icon : info.applicationInfo.icon;
+                    return iconId == 0 ? null : pm.getDrawable(info.packageName, iconId, info.applicationInfo);
+                } catch (PackageManager.NameNotFoundException | Resources.NotFoundException | SecurityException e) {
+                    return null;
+                }
+            });
+            items.add(new Entry(Entry.FIXED, slot.label, new ComponentName(ctx, "fixed-slot-" + n),
+                    icon == null ? FamilyArtwork.banner(ctx.getResources(), n) : null, icon, null, 0));
+        }
+        docked = items.size();
+        emptySlots = 0;
+        notifyDataSetChanged();
+    }
+
+    private void launchFixed(Entry entry) {
+        int position = items.indexOf(entry);
+        if (position < 0) return;
+        FixedHome.Slot slot = fixedSlots.get(position);
+        if (slot.isInput()) {
+            listener.onOpenInput(slot.target);
+            return;
+        }
+        Intent intent = slot.resolve(ctx.getPackageManager()::getLeanbackLaunchIntentForPackage);
+        if (intent != null) {
+            try {
+                ctx.startActivity(intent);
+                return;
+            } catch (ActivityNotFoundException | SecurityException ignored) { }
+        }
+        Toast.makeText(ctx, R.string.fixed_home_unavailable, Toast.LENGTH_LONG).show();
     }
 
     /** icon_tiles: the app's icon centred on a dark banner-shaped tile, for apps whose own banner crops badly. */
@@ -477,7 +530,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         // The dock has no labels, unless always_show_names asks for them (DockDecoration then makes room in the band).
         // In a single row every tile is the dock's kind: the big title above names it.
         boolean dockKind = DockSlots.inDockRow(dockRow, singleRow, position, dockSize);
-        h.name.setVisibility(dockKind && restNameAlpha == 0f ? View.INVISIBLE : View.VISIBLE);
+        h.name.setVisibility(!fixedHome && dockKind && restNameAlpha == 0f ? View.INVISIBLE : View.VISIBLE);
+        h.card.setContentDescription(e.label);
         h.inDock = dockKind;
         boolean focused = h.card.isFocused();   // a rebind after reload() can hit the focused tile
         h.name.setAlpha(focused ? 1f : restNameAlpha);
@@ -509,6 +563,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         }
         h.card.setOnClickListener(v -> launch(e));
         h.card.setOnLongClickListener(v -> {
+            if (fixedHome) return true;
             if (tileMenu) {
                 int pos = h.getBindingAdapterPosition();
                 if (pos != RecyclerView.NO_POSITION) listener.onTileLongPress(pos, v);
@@ -526,6 +581,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     /** Opens the tile's activity by explicit component, with no extras: a card can name nothing else. */
     private void launch(Entry e) {
+        if (fixedHome) {
+            launchFixed(e);
+            return;
+        }
         if (e.kind == Entry.HOME_SETTINGS) {
             ctx.startActivity(new Intent(ctx, HomeSettingsActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -583,6 +642,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     /** Uses this saved order and dock size from the next reload() (Order.ranks, Order.docked). */
     void setSavedOrder(Map<String, Integer> ranks, int docked) {
+        if (fixedHome) return;
         savedRanks = ranks;
         savedDocked = docked;
     }

@@ -4,6 +4,20 @@ Instructions for coding agents (Claude Code, Codex, Gemini CLI, Cursor, Copilot 
 this repository. People should start with [README.md](README.md) and [CONTRIBUTING.md](CONTRIBUTING.md);
 this file repeats their rules in the form an agent needs, and links to them for the detail.
 
+## 本地家庭版：保留已验证的 Authenticator 绑定
+
+用户已扫码并验证当前设置锁，明确要求后续在这台电脑编译时继续使用这份绑定。
+
+- 日常编译、测试、主题更新和覆盖安装不得重新生成或更换 TOTP 密钥；不要运行
+  `tools/settings-auth.py`，除非用户明确要求重置或更换绑定。
+- 更新现有设备使用保留应用数据的覆盖安装（例如 `adb -d install -r <apk>`），保持包名和
+  签名不变。不得清除 Launcher 数据、先卸载再安装，或重新创建签名密钥来解决安装问题。
+- 编译不会生成认证密钥。当前密钥在设备的私有应用数据和用户的 Authenticator 中，临时
+  二维码已删除；不要把密钥、二维码或恢复材料写进源码、APK、主题、日志或提交。
+- 认证测试使用隔离模拟器和独立测试密钥，不得覆盖用户已验证设备的绑定。
+- 首次部署到另一台设备时，不能声称 APK 自动带有当前绑定，也不要自动生成另一份绑定。
+  另行安排迁移用户现有绑定；在迁移完成前保留当前设备的数据和绑定。
+
 ## First: which job are you doing?
 
 | You were asked to | Do this |

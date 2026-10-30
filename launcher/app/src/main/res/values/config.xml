@@ -7,6 +7,21 @@
 -->
 <resources>
 
+    <!-- This household's opt-in fixed Home. Set false to restore the normal launcher.
+         Build-time only: themes and on-TV choices cannot unlock or replace these four slots.
+         Format: label|package[,alternate package], or label|input:HDMI 1.
+         App identities verified from the publishers; HDMI input ID must be checked on the real TV. -->
+    <bool name="fixed_home">true</bool>
+    <string-array name="fixed_home_slots" translatable="false">
+        <item>看电影|org.jellyfin.androidtv</item>
+        <item>看照片|com.synology.projectkailash,com.synology.projectkailash.cn</item>
+        <item>看电视|input:HDMI 1</item>
+        <item>看央视|com.newtv.cboxtv</item>
+    </string-array>
+    <!-- Optional exact HDMI 1 input ID from this TV's dumpsys tv_input. Empty uses an unambiguous
+         original HDMI 1 label. Never guess HW1 or select the first enumerated input. -->
+    <string name="fixed_home_input_id" translatable="false"></string>
+
     <!-- Tried in order when no standard settings handler is usable; each package must also be visible
          through <queries> in the manifest. -->
     <string-array name="settings_fallback_components" translatable="false">
@@ -255,7 +270,7 @@
          for Arabic with Western digits), instead of the TV's. For firmware
          that has no menu entry for the owner's language although the launcher is translated into it (a China-market
          Xiaomi offers Chinese and English only). Empty, the default, follows the TV. A theme can set it ("locale"). -->
-    <string name="locale" translatable="false"></string>
+    <string name="locale" translatable="false">zh-CN</string>
 
     <!-- A name after the greeting: "Mr. Trịnh" shows GOOD MORNING, MR. TRỊNH. Empty: the greeting alone. -->
     <string name="greeting_name" translatable="false"></string>

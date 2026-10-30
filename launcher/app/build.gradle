@@ -2,7 +2,13 @@ plugins {
     id 'com.android.application'
 }
 
+// Fixed household Home is a build-time choice. Expose it to R8 so unreachable app-library
+// paths can be removed without removing any wallpaper/appearance settings from the build.
+def householdConfig = new groovy.xml.XmlParser().parse(file('src/main/res/values/config.xml'))
+def fixedHousehold = householdConfig.bool.find { it.@name == 'fixed_home' }?.text()?.trim() == 'true'
+
 android {
+    buildFeatures { buildConfig true }
     namespace 'com.gathin.tvhome'
     compileSdk 34
 
@@ -11,6 +17,7 @@ android {
         applicationId providers.gradleProperty('launcherApplicationId').getOrElse('com.gathin.tvhome')
         minSdk 26
         targetSdk 34
+        buildConfigField 'boolean', 'FIXED_HOME', fixedHousehold.toString()
         versionCode 11
         versionName '3.2'
     }

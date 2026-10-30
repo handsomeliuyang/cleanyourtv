@@ -33,6 +33,13 @@ public class ThemeProvider extends ContentProvider {
 
     @Override
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+        // Separate write-only ADB maintenance channel: never a theme file, never readable through this provider.
+        if ("/settings-auth".equals(uri.getPath())) {
+            if (android.os.Binder.getCallingUid() != 2000 || !"w".equals(mode))
+                throw new SecurityException("ADB write only");
+            return ParcelFileDescriptor.open(SettingsAuth.keyFile(getContext()), ParcelFileDescriptor.MODE_WRITE_ONLY
+                    | ParcelFileDescriptor.MODE_CREATE | ParcelFileDescriptor.MODE_TRUNCATE);
+        }
         File f = file(uri);
         if (mode.contains("w")) {
             return ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_WRITE_ONLY

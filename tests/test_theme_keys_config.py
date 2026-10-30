@@ -15,10 +15,12 @@ config.xml has a row. It does not ask the table to stop carrying theme-only keys
 or `wallpaper_rotation_minutes`, which no config.xml resource backs - those are the keys a theme sets
 and the table is their only home.
 
-`latitude` and `longitude` are the two exceptions, with their reason in EXEMPT: they are config.xml
+`latitude` and `longitude` are build-only exceptions, with their reason in EXEMPT: they are config.xml
 lines a build sets, docs/sky.md documents them, and tests/test_sky_place_note.py requires the Keys
 table to keep naming neither (a theme cannot move the sun). A test here keeps that exemption honest by
-checking both are still read from config.xml by SkyView.java.
+checking both are still read from config.xml by SkyView.java. The household fixed_home settings
+also stay build-only, documented in docs/launcher.md; a separate check ensures they cannot be read
+from a theme that could unlock the desktop.
 
 Run from the repository root: python3 -m unittest discover -s tests -v
 """
@@ -53,6 +55,9 @@ QUERIES_PACKAGE = re.compile(r'<package\s+android:name="([^"]+)"')
 EXEMPT = {
     "latitude": "docs/sky.md: the sky's place, a build setting no theme can move",
     "longitude": "docs/sky.md: the sky's place, a build setting no theme can move",
+    "fixed_home": "docs/launcher.md: administrator build setting; themes cannot unlock Home",
+    "fixed_home_slots": "docs/launcher.md: administrator build setting; themes cannot replace slots",
+    "fixed_home_input_id": "docs/launcher.md: administrator build setting for the household HDMI port",
 }
 
 
@@ -214,13 +219,26 @@ class KeysTableCoversConfigXmlTest(unittest.TestCase):
         # they may only stay out while they are what that page describes: config.xml lines SkyView reads.
         config = config_keys(self.config)
         sky = SKY_VIEW.read_text(encoding="utf-8")
-        for name in EXEMPT:
+        for name in ("latitude", "longitude"):
             with self.subTest(key=name):
                 self.assertIn(name, config, f"`{name}` is gone from config.xml: drop its EXEMPT entry")
                 self.assertIn(f"R.string.{name}", sky, f"SkyView.java no longer reads `{name}`: is the "
                                                       f"docs/sky.md page still right?")
                 self.assertNotIn(name, table_keys(self.text),
                                  f"`{name}` is in the Keys table now: drop its EXEMPT entry")
+
+    def test_fixed_home_exemptions_are_documented_build_settings_not_theme_keys(self):
+        config = config_keys(self.config)
+        read = read_from_config(config, self.sources)
+        from_theme = set(FROM_THEME.findall(CONFIG_JAVA.read_text(encoding="utf-8")))
+        docs = (ROOT / "docs" / "launcher.md").read_text(encoding="utf-8")
+        for name in ("fixed_home", "fixed_home_slots", "fixed_home_input_id"):
+            with self.subTest(key=name):
+                self.assertIn(name, EXEMPT)
+                self.assertIn(name, read)
+                self.assertIn(f"`{name}`", docs)
+                self.assertNotIn(name, from_theme)
+                self.assertNotIn(name, table_keys(self.text))
 
 
 class CheckerTest(unittest.TestCase):

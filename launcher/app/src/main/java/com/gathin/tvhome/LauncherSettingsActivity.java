@@ -27,6 +27,7 @@ public final class LauncherSettingsActivity extends Activity {
     }
 
     static final String EXTRA_REORDER = "com.gathin.tvhome.extra.REORDER_FROM_SETTINGS";
+    private SettingsGate gate;
     private SharedPreferences choices;
     private final TextView[] columnChoices = new TextView[4];
     private final TextView[] rowChoices = new TextView[4];
@@ -49,11 +50,34 @@ public final class LauncherSettingsActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (getResources().getBoolean(R.bool.fixed_home)) {
+            gate = new SettingsGate(this, this::showSettings);
+            gate.show();
+        } else showSettings();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (gate != null) {
+            // No unlocked activity or its child dialogs survive Home, another app, or a screen lock.
+            setContentView(new View(this));
+            finish();
+        }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if (gate != null && !gate.open && gate.key(event)) return true;
+        return super.dispatchKeyEvent(event);
+    }
+
+    private void showSettings() {
         setContentView(R.layout.activity_launcher_settings);
         choices = getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE);
         Config config = Config.load(this);
         View reorderChoice = findViewById(R.id.reorderChoice);
-        reorderChoice.setVisibility(config.launcherSettingsButton ? View.VISIBLE : View.GONE);
+        reorderChoice.setVisibility(config.launcherSettingsButton && !config.fixedHome ? View.VISIBLE : View.GONE);
         reorderChoice.setOnClickListener(v -> {
             setResult(RESULT_OK, new Intent().putExtra(EXTRA_REORDER, true));
             finish();
@@ -174,8 +198,14 @@ public final class LauncherSettingsActivity extends Activity {
         });
         findViewById(R.id.tvSettingsChoice).setOnClickListener(v ->
                 open(SystemSettings.intent(this, Settings.ACTION_SETTINGS)));
+        if (config.fixedHome) {
+            // Four fixed slots have no column/extra-row choices. Keep all appearance controls usable.
+            for (int id : new int[]{R.id.columnsLabel, R.id.columnsGroup, R.id.rowsLabel, R.id.rowsGroup})
+                findViewById(id).setVisibility(View.GONE);
+        }
         refresh();
-        if (config.launcherSettingsButton) reorderChoice.requestFocus();
+        if (config.fixedHome) wallpaperChoice.requestFocus();
+        else if (config.launcherSettingsButton) reorderChoice.requestFocus();
         else columnChoices[Math.max(0, Math.min(columns - 4, 3))].requestFocus();
     }
 

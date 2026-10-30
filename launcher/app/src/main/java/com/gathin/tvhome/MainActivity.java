@@ -426,7 +426,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private java.util.Map<Integer, String> homeAppKeys = java.util.Collections.emptyMap();
     /** clock_format, for the race panel's session times (the TextClocks take it in onCreate). */
     private String clockFormat = "system";
+    private boolean fixedHome;
     private java.util.Map<Integer, String> homeHoldAppKeys = java.util.Collections.emptyMap();
+
+    @Override
+    protected void onRestoreInstanceState(Bundle state) {
+        super.onRestoreInstanceState(state);
+        // Lock-screen rotation can save a grid anchor using the transient portrait padding.
+        // Fixed Home has exactly one row: restoring any other vertical position can hide every tile.
+        if (fixedHome) ((GridLayoutManager) grid.getLayoutManager()).scrollToPositionWithOffset(0, 0);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -435,6 +444,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         density = getResources().getDisplayMetrics().density;
         // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
         Config cfg = Config.load(this);
+        fixedHome = cfg.fixedHome;
         homeAppKeys = RemoteKeys.parseAppKeys(cfg.appKeys);
         clockFormat = cfg.clockFormat;
         ClockFormat.apply(getWindow().getDecorView(), clockFormat);
@@ -685,11 +695,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (singleRow && !cfg.alwaysShowNames) want += (int) (29 * density);
             if (grid.getPaddingTop() != want) {
                 grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
-                // A vertical grid parks the dock on the new padding line by scrolling (onTileFocused); a sideways
-                // row cannot scroll vertically, and the layout request made from inside this layout pass is
-                // dropped, so lay the row out again on the next frame. The glass and the title were placed for the
-                // old position, so fit them again once it has moved.
-                if (singleRow) grid.post(() -> {
+                // A regular vertical grid parks the dock by scrolling (onTileFocused). A sideways or fixed
+                // row needs another layout after the padding changes: requests inside this layout pass are
+                // dropped. Re-anchor fixed Home as well, so a lock-screen resize cannot leave its only row
+                // outside the viewport. Refit the glass once the cards have moved.
+                if (singleRow || fixedHome) grid.post(() -> {
+                    if (fixedHome) ((GridLayoutManager) grid.getLayoutManager()).scrollToPositionWithOffset(0, 0);
                     grid.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
                         @Override
                         public void onGlobalLayout() {
@@ -854,6 +865,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return true;
         });
 
+        if (fixedHome) {
+            ((TextView) btnSettings).setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_settings, 0, 0, 0);
+            makeIconOnly((TextView) btnSettings);
+            btnSettings.setContentDescription(getString(R.string.launcher_settings));
+            // Keep the network indicator read-only; appearance settings have their own gear.
+            btnWifi.setOnClickListener(null);
+            btnWifi.setOnLongClickListener(null);
+            btnWifi.setClickable(false);
+            btnWifi.setLongClickable(false);
+            btnWifi.setFocusable(false);
+        }
+
         // Keep focus on the top bar at its ends and at the top: Android's focus finder would otherwise
         // jump to a tile far below when there is nothing in that direction.
         boolean rtlMenuBar = getResources().getBoolean(R.bool.rtl_menu_bar);
@@ -943,6 +966,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * top_menu hides the pill, so the list hangs under the gear there, as in showInputs().
      */
     private boolean openInputsIfAsked(Intent intent) {
+        if (fixedHome) return false;
         if (intent == null || !ACTION_VIEW_INPUTS.equals(intent.getAction())) return false;
         setIntent(new Intent(Intent.ACTION_MAIN));
         View anchor = topMenu ? findViewById(R.id.btnSettings) : btnInputs;
@@ -1190,7 +1214,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroArtCache.clear();
         heroArtKey = null;
         // One LEANBACK query for both the tiles and the card checks.
-        final List<ResolveInfo> leanback = getPackageManager().queryIntentActivities(
+        final List<ResolveInfo> leanback = fixedHome ? Collections.emptyList() : getPackageManager().queryIntentActivities(
                 new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER), 0);
         cards = moduleCards ? CardFeature.run(() -> Cards.discover(this, hiddenApps,
                 () -> Cards.load(Cards.storeFile(this)), leanback), none) : none;
@@ -1352,6 +1376,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        if (fixedHome && (event.getKeyCode() == KeyEvent.KEYCODE_MENU
+                || event.getKeyCode() == KeyEvent.KEYCODE_ALL_APPS)) return true;
         // Vendor keys (TCL Netflix button, 4062) never reach the key services, only the focused window, so their
         // "hold:" entries run here too or nowhere. Only while resumed: onPause releases Home's holds, and a DOWN
         // taken after that would arm one nothing releases.
@@ -1436,6 +1462,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** The start shared by reorder and edit-dock mode. False when there is nothing to move. */
     private boolean beginReorder() {
+        if (fixedHome) return false;
         if (adapter.movableCount() < 2) return false;
         // Before the reload below: once it has dropped the empty slots, the dock row also shows grid apps.
         dockInSession = new HashSet<>();
@@ -1693,6 +1720,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override
     public void onLibraryRequested() {
+        if (fixedHome) return;
         if (appLibrary != null) appLibrary.close();
         if (openPopup != null) openPopup.dismiss();
         libraryFocusPending = false;
@@ -2346,6 +2374,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override
     public boolean onTileVerticalKey(int position, int keyCode) {
+        if (fixedHome && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            findViewById(R.id.btnSettings).requestFocus();
+            return true;
+        }
+        if (fixedHome && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return true;
         int count = adapter.appCount();
         int target;
         if (singleRow) {
@@ -2433,6 +2466,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** The first top-bar button after Inputs that is shown, in bar order (top_bar_apps, the network pill, ...); Settings is always there. */
     private View firstTopButton() {
+        if (fixedHome) return findViewById(R.id.btnSettings);
         ViewGroup bar = findViewById(R.id.topButtons);
         for (int i = 0; i < bar.getChildCount(); i++) {
             View button = bar.getChildAt(i);
@@ -3528,6 +3562,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** top_menu: the gear's dropdown, standing in for the Inputs, Wi-Fi and Settings pills. */
     private void showTopMenu() {
+        if (fixedHome) return;
         View anchor = findViewById(R.id.btnSettings);
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
@@ -3557,6 +3592,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** The header opens launcher settings directly; hold OK keeps the extra home actions available. */
     private void showSettingsMenu() {
+        if (fixedHome) return;
         View anchor = findViewById(R.id.btnSettings);
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
@@ -3589,14 +3625,37 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      *  the same path the Inputs menu's own rows use, instead of opening the input's owning app normally. */
     @Override
     public void onOpenInput(String inputId) {
+        if (fixedHome) {
+            openFixedInput(inputId);
+            return;
+        }
         openInput(inputId);
     }
 
-    /**
-     * Hold OK on a tile: a glass menu next to it. Move starts reorder mode with this tile already picked up;
-     * Remove from Home takes the shortcut off (only with the app library on, where one press adds it back);
-     * App info opens the TV's page for the app, which is what holding OK used to do.
-     */
+    /** Resolve HDMI by an explicit ID or one unambiguous original port label, never enumeration order. */
+    private void openFixedInput(String target) {
+        String selected = null;
+        String configured = getString(R.string.fixed_home_input_id).trim();
+        String label = target.startsWith(FixedHome.INPUT) ? target.substring(FixedHome.INPUT.length()) : "";
+        TvInputManager manager = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
+        try {
+            if (manager != null) {
+                List<TvInputInfo> ports = new ArrayList<>();
+                for (TvInputInfo info : manager.getTvInputList()) {
+                    if (info.getType() != TvInputInfo.TYPE_HDMI || info.getParentId() != null) continue;
+                    ports.add(info);
+                }
+                TvInputInfo port = FixedHome.input(ports, configured, label, TvInputInfo::getId,
+                        info -> String.valueOf(info.loadLabel(this)));
+                if (port != null) selected = port.getId();
+            }
+        } catch (RuntimeException ignored) {
+            selected = null;
+        }
+        if (selected == null) Toast.makeText(this, R.string.fixed_home_unavailable, Toast.LENGTH_LONG).show();
+        else openInput(selected);
+    }
+
     // ---- hold OK ---------------------------------------------------------------------------------
     // View's own long click misses on some remotes: an IR remote that sends its repeat frames as separate
     // presses, or a Bluetooth one whose repeats land after a tile rebind, never holds one DOWN long enough.
@@ -3681,6 +3740,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override
     public void onTileLongPress(int position, View card) {
+        if (fixedHome) return;
         if (reordering || openPopup != null) return;
         String key = adapter.keyAt(position);
         String pkg = adapter.packageAt(position);
